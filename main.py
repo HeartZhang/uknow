@@ -10,6 +10,7 @@ import sys
 import js2py
 import datetime
 import logging
+from math import sqrt
 
 logging.disable(logging.WARNING)
 
@@ -26,14 +27,17 @@ uas = [
 ]
 UKNOW_BASE_URL = 'http://91porn.com/v.php'
 
+INIT_RUN = False
+
 
 # 初始化sqlite3 数据库
 def init_db():
     connection = sqlite3.connect("uknow.db")
-    # connection.execute("DROP TABLE IF EXISTS uknow_video")
+    connection.execute("DROP TABLE IF EXISTS uknow_video")
     connection.execute(
         "CREATE TABLE IF NOT EXISTS uknow_video("
         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "video_view_key TEXT UNIQUE,"
         "video_url TEXT UNIQUE,"
         "video_name TEXT,"
         "video_source TEXT,"
@@ -45,7 +49,14 @@ def init_db():
         "like_number INTEGER,"
         "comment_number INTEGER,"
         "quality FLOAT,"
-        "flag INTEGER DEFAULT 0)")
+        "flag INTEGER DEFAULT 0,"
+        "thumbs_up INTEGER DEFAULT 0,"
+        "top INTEGER DEFAULT 0,"
+        "has_local_cache INTEGER DEFAULT 0,"
+        "local_cache_start INTEGER,"
+        "local_cache_exp INTEGER,"
+        "local_cache_source INTEGER)"
+    )
 
 
 # 随机生成http header
@@ -112,16 +123,30 @@ def list_url(from_page=1):
         # downLoadBatch(-1)
 
 
+# 质量计算--作废
 def cal_quality(add_time, view_number, like_number):
     date = datetime.datetime.strptime(add_time, '%Y-%m-%d')
     today = datetime.datetime.now()
-    days = (today - date).days
+    days = (today - date).days + 1
 
     mean_view_per_day = int(view_number) / days
     like_view_per_day = int(like_number) / days
 
     quality = round((like_view_per_day / mean_view_per_day) * 1000, 3)
     return quality
+
+
+# 新的质量信心得分算法
+def cal_confidence(view_number, like_number):
+    n = int(view_number)
+    l = int(like_number)
+    if n == 0 or l == 0:
+        return 0
+
+    z = 1.6  # 1.0 = 85%, 1.6 = 95%
+    phat = float(like_number) / n
+    return round(
+        (sqrt(phat + z * z / (2 * n) - z * ((phat * (1 - phat) + z * z / (4 * n)) / n)) / (1 + z * z / n)) * 10, 4)
 
 
 def get_url_content(html):
@@ -132,28 +157,40 @@ def get_url_content(html):
     for videoLi in video_content_list.find_all('div', attrs={'class': 'listchannel'}):
         video_name = videoLi.find('img', attrs={'width': '120'}).get('title').replace("'", "")
         video_url = videoLi.find('a', attrs={'target': 'blank'}).get('href')
+        video_view_key= get_view_key(video_url)
         duration = videoLi.select(".info")[0].next_sibling.strip()
         try:
-            video_author = videoLi.select(".info")[2].next_sibling.strip()
+            video_author = videoLi.select(".info")[2].next_sibling.strip().replace("'", "")
         except AttributeError:
             video_author = "None"
         view_number = videoLi.select(".info")[3].next_sibling.strip()
         like_number = videoLi.select(".info")[4].next_sibling.strip()
         comment_number = videoLi.select(".info")[5].next_sibling.strip()
         i += 1
-        add_time, video_source, video_type = get_video_info(video_url)
-        # 视频不存在或者解析信息失败,跳过
-        if not video_source:
-            continue
+        if INIT_RUN:
+            add_time, video_source, video_type = get_video_info(video_url)
+            # 视频不存在或者解析信息失败,跳过
+            if not video_source:
+                continue
 
-        quality = cal_quality(add_time, view_number, like_number)
+            quality = cal_confidence(view_number, like_number)
 
-        connection.execute(
-            "INSERT or REPLACE INTO uknow_video(video_url,video_name ,video_source, video_type ,duration ,"
-            "add_time ,video_author ,view_number ,like_number ,comment_number, quality) values('"
-            + video_url + "','" + video_name + "','" + video_source + "','" + video_type + "','" + duration + "','"
-            + add_time + "','" + video_author + "'," + view_number + "," + like_number + "," + comment_number + "," + str(
-                quality) + ")")
+            connection.execute(
+                "INSERT or REPLACE INTO uknow_video(video_view_key, video_url,video_name ,video_source, video_type ,duration ,"
+                "add_time ,video_author ,view_number ,like_number ,comment_number, quality) values('"
+                + video_view_key + "','" + video_url + "','" + video_name + "','" + video_source + "','" + video_type + "','" + duration + "','"
+                + add_time + "','" + video_author + "'," + view_number + "," + like_number + "," + comment_number + "," + str(
+                    quality) + ")")
+        else:
+            quality = cal_confidence(view_number, like_number)
+
+            connection.execute(
+                "INSERT or REPLACE INTO uknow_video(video_view_key, video_url,video_name ,duration ,"
+                "video_author ,view_number ,like_number ,comment_number, quality) values('"
+                + video_view_key + "','"+ video_url + "','" + video_name + "','" + duration + "','"
+                + video_author + "'," + view_number + "," + like_number + "," + comment_number + "," + str(
+                    quality) + ")")
+
     connection.commit()
     connection.close()
 
@@ -163,7 +200,7 @@ def get_video_info(url):
     try:
         start = time.clock()
 
-        response = get_content(url).content
+        response = get_content(url)
         if not response:
             return None, None, None
         if not response.content:
@@ -173,8 +210,8 @@ def get_video_info(url):
         soup2 = BeautifulSoup(utext, 'lxml')
         # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
         # 判断视频信息有效性
-        video_valid= soup2.find('div', attrs={'id': 'container'})
-        if video_valid and '视频不存在'in video_valid.get_text():
+        video_valid = soup2.find('div', attrs={'id': 'container'})
+        if video_valid and '视频不存在' in video_valid.get_text():
             elapsed = (time.clock() - start)
             print("get_video_info not found Time used:{}s".format(round(elapsed, 2)))
             return None, None, None
@@ -196,7 +233,7 @@ def get_video_info(url):
         video_source = decrypt_url(encrypt_1, encrypt_2)
         pattern = re.findall('\'(.*?)\'', video_source)
         video_source_url = pattern[0]
-        video_source_type = pattern[1].split('/')[1]
+        video_source_type = pattern[1]
 
         # print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
         elapsed = (time.clock() - start)
@@ -211,6 +248,15 @@ def get_video_info(url):
 def decrypt_url(p1, p2):
     jsc, _ = js2py.run_file('md5.js')
     return jsc.encrypt(p1, p2)
+
+
+# 提取view_key
+def get_view_key(url):
+    if not url:
+        return None
+    pattern = re.compile(r'viewkey=(.*?)\&', re.MULTILINE | re.DOTALL)
+    view_key = pattern.search(url).group(1)
+    return view_key
 
 
 def downLoad(link):
@@ -260,7 +306,7 @@ def downLoadBatch(flag=0):
             for str in cursor:
                 urlList.append(str[0])
             connection.close()
-        if (len(urlList) > 0):
+        if len(urlList) > 0:
             for str in urlList:
                 downLoad(str)
             downLoadBatch(flag)
@@ -274,4 +320,4 @@ if __name__ == '__main__':
     if not os.path.isdir(target_folder):
         os.mkdir(target_folder)
     init_db()
-    list_url(from_page=2043)
+    list_url(from_page=0)

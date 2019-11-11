@@ -15,6 +15,13 @@ import logging
 
 
 
+'''
+http://xx.com/view_video.php?viewkey=13b235b47fd2186d2621&page=251&viewtype=basic&category=mf
+http://xx.com/view_video.php?viewkey=52fb25dc3a42d39650a9&page=98&viewtype=basic&category=mf
+http://xx.com/view_video.php?viewkey=37af3b119bd7ec76936d&page=549&viewtype=basic&category=mf
+http://xx.com/view_video.php?viewkey=ba4b7915c66803775666&page=4860&viewtype=basic&category=mf
+'''
+
 def cal_quality(add_time, view_number, like_number):
     date = datetime.datetime.strptime(add_time, '%Y-%m-%d')
     today = datetime.datetime.now()
@@ -37,6 +44,7 @@ def setHeader():
         "Accept-Language": "zh-CN,zh;q=0.8,en;q=0.6",
         'Accept-Encoding': 'gzip, deflate, sdch',
         'X-Forwarded-For': randomIP,
+        'Referer': '',
     }
     return headers
 
@@ -49,6 +57,7 @@ def get_content(url, stream=False):
         response.encoding = response.apparent_encoding
         if response.status_code == 200:
             return response
+        print(response)
     except Exception as e:
         print("请求失败{0},reason={1}".format(url, e))
         return None
@@ -107,5 +116,17 @@ def get_video_info(url):
 #cal_quality('2015-07-14',6708,530)
 
 
+def get_view_key(url):
+    pattern = re.compile(r'viewkey=(.*?)\&', re.MULTILINE | re.DOTALL)
+    view_key = pattern.search(url).group(1)
+    return view_key
+
 if __name__ == '__main__':
-    print(get_video_info('http://91porn.com/view_video.php?viewkey=ff708ac2e4c28220275a&page=422&viewtype=basic&category=mf'))
+    '''
+    http://xx.com/view_video.php?viewkey=13b235b47fd2186d2621&page=251&viewtype=basic&category=mf
+    http://xx.com/view_video.php?viewkey=52fb25dc3a42d39650a9&page=98&viewtype=basic&category=mf
+    http://xx.com/view_video.php?viewkey=37af3b119bd7ec76936d&page=549&viewtype=basic&category=mf
+    http://xx.com/view_video.php?viewkey=ba4b7915c66803775666&page=4860&viewtype=basic&category=mf
+    '''
+
+    print(get_view_key('http://xx.com/view_video.php?viewkey=52fb25dc3a42d39650a9&page=98&viewtype=basic&category=mf'))

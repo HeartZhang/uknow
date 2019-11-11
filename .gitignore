@@ -1,0 +1,7 @@
+# Avoid ignoring Maven wrapper jar file (.jar files are usually ignored)
+.idea/
+*.iml
+build/
+log/
+identify_code.png
+*.spec

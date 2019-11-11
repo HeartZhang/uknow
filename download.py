@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Time : 2019/2/13 8:17 PM
-# @Author : cxa
-# @File : mp4downloders.py
-# @Software: PyCharm
 import requests
 from tqdm import tqdm
 import os
@@ -39,7 +34,7 @@ async def async_download_from_url(url, dst):
         req = await fetch(session, url, dst)
 
         file_size = int(req.headers['content-length'])
-        print(f"获取视频总长度:{file_size}")
+        print(f"get file size:{file_size}")
         if os.path.exists(dst):
             first_byte = os.path.getsize(dst)
         else:
@@ -57,6 +52,7 @@ def download_from_url(url, dst):
     '''同步'''
     response = requests.get(url, stream=True)
     file_size = int(response.headers['content-length'])
+    print(f"get file size:{file_size}")
     if os.path.exists(dst):
         first_byte = os.path.getsize(dst)
     else:
@@ -77,14 +73,23 @@ def download_from_url(url, dst):
     return file_size
 
 
-if __name__ == '__main__':
-    # 异步方式下载
-    url = "http://v11-tt.ixigua.com/7da2b219bc734de0f0d04706a9629b61/5c77ed4b/video/m/220d4f4e99b7bfd49efb110892d892bea9011612eb3100006b7bebf69d81/?rc=am12NDw4dGlqajMzNzYzM0ApQHRAbzU6Ojw8MzQzMzU4NTUzNDVvQGgzdSlAZjN1KWRzcmd5a3VyZ3lybHh3Zjc2QHFubHBfZDJrbV8tLTYxL3NzLW8jbyMxLTEtLzEtLjMvLTUvNi06I28jOmEtcSM6YHZpXGJmK2BeYmYrXnFsOiMzLl4%3D"
-    task = [asyncio.ensure_future(async_download_from_url(url, f"{i}.mp4")) for i in range(1, 12)]
+# 异步方式下载
+def async_exec():
+    url = "http://185.38.13.130//mp43/288480.mp4?st=sTT_s7ocvoWtG1DffBbMTQ&e=1555454272"
+    task = [asyncio.ensure_future(async_download_from_url(url, f"temp/{i}.mp4")) for i in range(1, 3)]
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.wait(task))
     loop.close()
-    # 注释部分是同步方式下载。
-    # url = "http://v11-tt.ixigua.com/7da2b219bc734de0f0d04706a9629b61/5c77ed4b/video/m/220d4f4e99b7bfd49efb110892d892bea9011612eb3100006b7bebf69d81/?rc=am12NDw4dGlqajMzNzYzM0ApQHRAbzU6Ojw8MzQzMzU4NTUzNDVvQGgzdSlAZjN1KWRzcmd5a3VyZ3lybHh3Zjc2QHFubHBfZDJrbV8tLTYxL3NzLW8jbyMxLTEtLzEtLjMvLTUvNi06I28jOmEtcSM6YHZpXGJmK2BeYmYrXnFsOiMzLl4%3D"
-    #
-    # download_from_url(url, "夏目友人帐第一集.mp4")
+
+
+# 同步方式下载
+def sync_exec():
+    url = "http://192.240.120.34//mp43/219718.mp4?st=bmftKonmYBBhGooEY0NoOA&e=1555035414"
+    download_from_url(url, "夏目友人帐第一集.mp4")
+
+def main():
+    sync_exec()
+
+
+if __name__ == '__main__':
+    main()
